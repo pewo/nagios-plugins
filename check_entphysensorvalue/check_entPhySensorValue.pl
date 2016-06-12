@@ -2,6 +2,10 @@
 #
 # check_entPhySensor.pl  -  Check (and graph) a procurve version
 #
+# You should find the latest version of this plugin on github
+# https://github.com/pewo/nagios-plugins
+#
+
 
 use strict;
 use warnings;

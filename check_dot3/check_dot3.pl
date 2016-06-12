@@ -2,6 +2,9 @@
 #
 # check_dot3.pl  -  Check dot3 interface statistcs
 #
+# You should find the latest version of this plugin on github
+# https://github.com/pewo/nagios-plugins
+#
 
 use strict;
 use warnings;

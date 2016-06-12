@@ -21,7 +21,9 @@ $VERSION = '0.1.6';
 # which was inspired by Ethan Galstad check_log.
 #
 # Latest version can be found at
-# http://sites.google.com/site/peterwirdemo/home/nagios-plugins/check_events.pl
+#
+# You should find the latest version of this plugin on github
+# https://github.com/pewo/nagios-plugins
 #
 #########
 # Version

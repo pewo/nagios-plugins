@@ -7,8 +7,8 @@
 # check_stpblock.pl  -  Check if there are any stp blocking ports
 # Written by Peter Wirdemo (peter <dot> wirdemo gmail <dot> com)
 # 
-# Latest version can be found at
-# http://sites.google.com/site/peterwirdemo/home/nagios-plugins/check_stpblock.pl
+# You should find the latest version of this plugin on github
+# https://github.com/pewo/nagios-plugins
 #
 #########
 # Version
