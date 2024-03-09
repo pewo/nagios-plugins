@@ -79,7 +79,7 @@
 
 use strict;
 use warnings;
-use vars qw($PROGNAME $VERSION $QSTRING $WARNING);
+use vars qw($PROGNAME $VERSION $QSTRING );
 use File::Basename qw(basename);
 use Data::Dumper;
 use Net::SNMP;
