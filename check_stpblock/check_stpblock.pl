@@ -71,7 +71,7 @@
 #     Show details for command-line debugging (can repeat up to 3 times)
 #  
 #  
-#  Copyright (c) 2012 peter.wirdemo@saabgroup.com
+#  Copyright (c) 2024 peter.wirdemo@gmail.com
 #  
 ##########################################################################################
 ##########################################################################################
