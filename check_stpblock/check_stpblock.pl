@@ -14,7 +14,7 @@
 # Version
 #########
 #
-# 0.1.2 2012-05-23
+# 0.2.0 2024-03-09
 #
 ##############
 # Description: 
@@ -49,6 +49,12 @@
 #  
 #   -C, --community=<community>
 #  
+#   -d, --disabled
+#     Exclude disabled ports
+#
+#   -D, --down
+#     Exclude down ports
+#
 #   -E, --exclude=<port,port,...port>
 #  
 #   -w, --warning=INTEGER
@@ -73,33 +79,68 @@
 
 use strict;
 use warnings;
-use vars qw($PROGNAME $VERSION $QSTRING);
+use vars qw($PROGNAME $VERSION $QSTRING $WARNING);
 use File::Basename qw(basename);
-use Nagios::Plugin;
-use Net::SNMP;
 use Data::Dumper;
+use Net::SNMP;
+
+$PROGNAME = basename($0);
+$VERSION = '0.2.0';
+$QSTRING = 'peter.wirdemo@gmail.com';
+
+use constant OK         => 0;
+use constant WARNING    => 1;
+use constant CRITICAL   => 2;
+use constant UNKNOWN    => 3;
+use constant DEPENDENT  => 4;
+
+my $npm = undef;
+eval { require Nagios::Plugin; };
+unless($@){ $npm = "Nagios::Plugin"; }
+
+unless ( $npm ) {
+    eval { require Nagios::Monitoring::Plugin; };
+    unless($@) { $npm = "Nagios::Monitoring::Plugin"; }
+}
+
+my($np) = $npm->new(
+        usage => "Usage: ",
+        version => $VERSION,
+        plugin  => $PROGNAME,
+        shortname => uc($PROGNAME),
+        blurb => 'Checks if there are any stp blocking ports',
+        extra   => "\n\nCopyright (c) 2012 $QSTRING",
+        timeout => 30,
+);
 
 my($debug) = 0;
 my($test) = "blocked";
 
-$PROGNAME = basename($0);
-$VERSION = '0.1.0';
-$QSTRING = 'peter.wirdemo@gmail.com';
-
-my $np = Nagios::Plugin->new(
-  usage => "Usage: ",
-  version => $VERSION,
-  plugin  => $PROGNAME,
-  shortname => uc($PROGNAME),
-  blurb => 'Checks if there are any stp blocking ports',
-  extra   => "\n\nCopyright (c) 2012 $QSTRING",
-  timeout => 30,
-);
 
 $np->add_arg(
   spec => 'hostname|H=s',
   help => "-H, --hostname=<hostname>\n",
   required => 1,
+);
+
+$np->add_arg(
+  spec => 'debug',
+  help => "--debug\n"
+    . "   Print some debug output\n",
+  required => 0,
+);
+$np->add_arg(
+  spec => 'disabled|d',
+  help => "-d, --disabled\n"
+    . "   Exclude ports that are disabled\n",
+  required => 0,
+);
+
+$np->add_arg(
+  spec => 'down|D',
+  help => "-D, --down\n"
+    . "   Exclude ports that are down\n",
+  required => 0,
 );
 
 $np->add_arg(
@@ -139,8 +180,16 @@ $np->getopts;
 
 # Assign, then check args
 
+if ( $np->opts->debug ) {
+    $debug = $np->opts->debug;
+}
+print "debug=[$debug]\n" if ( $debug );
 my $hostname = $np->opts->hostname;
 print "hostname=[$hostname]\n" if ( $debug );
+my $exclude_disabled = $np->opts->disabled || 0;
+print "disabled=[$exclude_disabled]\n" if ( $debug );
+my $exclude_down = $np->opts->down || 0;
+print "down=[$exclude_down]\n" if ( $debug );
 my $warning = $np->opts->warning || 0;
 print "warning=[$warning]\n" if ( $debug );
 my $critical = $np->opts->critical || 0;
@@ -176,6 +225,8 @@ alarm $np->opts->timeout;
 #-- iso(1). org(3). dod(6). internet(1). mgmt(2). mib-2(1). 
 #-- dot1dBridge(17). dot1dStp(2). dot1dStpPortTable(15). dot1dStpPortEntry(1). dot1dStpPortState(3)
 my($base) = "1.3.6.1.2.1.17.2.15.1.3";
+my($ifAdminStatus) = "1.3.6.1.2.1.2.2.1.7";
+my($ifOperStatus) = "1.3.6.1.2.1.2.2.1.8";
 
 my($snmp_version) = 2;
 my($port) = 161;
@@ -198,6 +249,32 @@ if ( $snmp_version =~ /[12]/ ) {
 my($key);
 my($response);
 my($errortot) = 0;
+if ( ! defined ( $response = $session->get_table($ifAdminStatus) ) ) {
+	$np->nagios_exit(UNKNOWN, "plugin timed out: " . $session->error);
+}
+my(%disabled);
+while ( my($key,$value) = each %$response ) {
+	next unless ( $value );
+    next if ( $value == 1 );
+	my(@arr) = split(/\./,$key);
+	my($port) = $arr[-1];
+    $disabled{$port}=$value;
+    print "\tgot port=$port, value=$value (disabled)\n" if ( $debug );
+}
+
+if ( ! defined ( $response = $session->get_table($ifOperStatus) ) ) {
+	$np->nagios_exit(UNKNOWN, "plugin timed out: " . $session->error);
+}
+my(%down);
+while ( my($key,$value) = each %$response ) {
+	next unless ( $value );
+    next if ( $value == 1 );
+    my(@arr) = split(/\./,$key);
+    my($port) = $arr[-1];
+    $down{$port}=$value;
+    print "\tgot port=$port, value=$value (down)\n" if ( $debug );
+}
+
 if ( ! defined ( $response = $session->get_table($base) ) ) {
 	$np->nagios_exit(UNKNOWN, "plugin timed out: " . $session->error);
 }
@@ -218,13 +295,18 @@ my(%port);
 while ( my($key,$value) = each %$response ) {
 	$ports++;
 	next unless ( $value );
-	print "\tgot key=$key, value=$value\n" if ( $debug );
 	my(@arr) = split(/\./,$key);
 	my($port) = $arr[-1];
 	print "port=[$port], value=[$value]\n" if ( $debug );
 	if ( $exclude{$port} ) {
-		print "Excluding $port\n" if ( $verbose );
+		print "Excluding $port (exclude)\n" if ( $verbose  || $debug );
 	}
+    elsif ( $exclude_down && defined($down{$port}) ) {
+		print "Excluding $port (port is down($down{$port}))\n" if ( $verbose  || $debug );
+    }
+    elsif ( $exclude_disabled && defined($disabled{$port}) ) {
+		print "Excluding $port (port is disabled($disabled{$port}))\n" if ( $verbose  || $debug );
+    }
 	else {
 		$stp{$value}++;
 		$port{$value} .= "$port ";
